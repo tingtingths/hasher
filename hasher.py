@@ -64,7 +64,7 @@ def _process(path, algo):
 
 
 def main():
-    parser = argparse.ArgumentParser(prog='hasher', description='hash given strings or files.')
+    parser = argparse.ArgumentParser(prog='hasher', description='hash files.')
     parser.add_argument('algo', type=str, choices=hashlib.algorithms_available, help='one of these hash algorithms')
     parser.add_argument('input', type=str, help='file path, omit if reading from stdin', nargs='*')
     parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')

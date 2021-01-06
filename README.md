@@ -8,7 +8,7 @@ usage: hasher [-h] [--version] [-c [CHECKSUM_FILE]] [--progress] [-p [PARALLEL]]
               {blake2s,sha3_512,shake_128,sha3_224,whirlpool,sha3_384,sha384,blake2b,sha224,sha1,ripemd160,sm3,sha512,sha256,sha3_256,mdc2,md5,sha512_224,md5-sha1,sha512_256,shake_256,md4}
               [input [input ...]]
 
-hash given strings or files.
+hash files.
 
 positional arguments:
   {blake2s,sha3_512,shake_128,sha3_224,whirlpool,sha3_384,sha384,blake2b,sha224,sha1,ripemd160,sm3,sha512,sha256,sha3_256,mdc2,md5,sha512_224,md5-sha1,sha512_256,shake_256,md4}
