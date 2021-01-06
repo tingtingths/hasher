@@ -51,14 +51,14 @@ def parse_checksum_file(file: str) -> typ.Iterator[re.Match]:
         return matches
 
 
-def _process(path, algo):
+def _process(path, algo, buf_size):
     ret = None
     if not os.path.exists(path):
         ret = Hashed(input_name=path, err='Not exists')
     if os.path.isfile(path):
         with open(path, 'rb') as f:
             _hash = hashlib.new(algo)
-            _hashed = _hash_stream(algo, lambda: f.read(4096))
+            _hashed = _hash_stream(algo, lambda: f.read(buf_size))
             ret = Hashed(input_name=path, algo=_hashed.name, hex=_hashed.hexdigest(), mode='b')
     return ret
 
@@ -71,6 +71,7 @@ def main():
     parser.add_argument('-c', '--checksum_file', type=str, nargs='?', help='checksum file to check against')
     parser.add_argument('--progress', action='store_true', help='print progress bar to stderr')
     parser.add_argument('-p', '--parallel', default=1, type=int, nargs='?', help='parallel count')
+    parser.add_argument('-b', '--buffer-size', default=65536, type=int, nargs='?', help='buffer size. default 65536')
     args = parser.parse_args()
 
     checksum_file = args.checksum_file
@@ -99,21 +100,29 @@ def main():
             paths = args.input
 
         console = rich.console.Console(stderr=True)
-        with rich.progress.Progress(console=console) as progress:
+        with rich.progress.Progress(console=console, transient=True) as progress:
             task_id = None
             if args.progress:
                 task_id = progress.add_task(total=len(paths), description='Hashing...')
 
             def _done(_future: futures.Future):
+                result = _future.result()
                 if task_id is not None:
-                    progress.update(task_id, advance=1)
-                if _future.result() is not None:
-                    hashed_lst.append(_future.result())
+                    if result is None:
+                        progress.update(task_id, advance=1)
+                    else:
+                        name = result.input_name
+                        if len(result.input_name) > 40:
+                            name = f'{name[:18]}...{name[len(name) - 19:]}'
+                        progress.update(task_id, advance=1, description=name)
+
+                if result is not None:
+                    hashed_lst.append(result)
 
             future_tasks = []
             with futures.ProcessPoolExecutor(max_workers=1 if args.parallel < 1 else args.parallel) as executor:
                 for path in paths:
-                    future = executor.submit(_process, path, args.algo)
+                    future = executor.submit(_process, path, args.algo, args.buffer_size)
                     future.add_done_callback(lambda f: _done(f))
                     future_tasks.append(future)
 
