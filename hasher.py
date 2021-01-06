@@ -8,9 +8,6 @@ import typing as typ
 from concurrent import futures
 from dataclasses import dataclass
 
-import rich.console
-import rich.progress
-
 __version__ = '0.0.2'
 
 
@@ -49,6 +46,32 @@ def parse_checksum_file(file: str) -> typ.Iterator[re.Match]:
         pattern = re.compile(r"^(?P<hex>.+)\s(?P<mode>\s|[*])(?P<input_name>.+)$", flags=re.MULTILINE)
         matches = pattern.finditer(s)
         return matches
+
+
+def _hash_paths(paths, hashed_lst, prog_args, task_id=None, progress=None):
+    def _done(_future: futures.Future):
+        result = _future.result()
+        if task_id is not None and progress is not None:
+            if result is None:
+                progress.update(task_id, advance=1)
+            else:
+                name = result.input_name
+                if len(result.input_name) > 40:
+                    name = f'{name[:18]}...{name[len(name) - 19:]}'
+                progress.update(task_id, advance=1, description=name)
+
+        if result is not None:
+            hashed_lst.append(result)
+
+    future_tasks = []
+    with futures.ProcessPoolExecutor(max_workers=1 if prog_args.parallel < 1 else prog_args.parallel) as executor:
+        for path in paths:
+            future = executor.submit(_process, path, prog_args.algo, prog_args.buffer_size)
+            future.add_done_callback(lambda f: _done(f))
+            future_tasks.append(future)
+
+        # wait all tasks
+        [f.result() for f in future_tasks]
 
 
 def _process(path, algo, buf_size):
@@ -99,35 +122,22 @@ def main():
         else:
             paths = args.input
 
-        console = rich.console.Console(stderr=True)
-        with rich.progress.Progress(console=console, transient=True) as progress:
-            task_id = None
-            if args.progress:
+        rich_print = False
+        if args.progress:
+            try:
+                import rich.console
+                import rich.progress
+                rich_print = True
+            except:
+                print('Warning: Cannot import rich...', file=sys.stderr)
+
+        if rich_print:
+            console = rich.console.Console(stderr=True)
+            with rich.progress.Progress(console=console, transient=True) as progress:
                 task_id = progress.add_task(total=len(paths), description='Hashing...')
-
-            def _done(_future: futures.Future):
-                result = _future.result()
-                if task_id is not None:
-                    if result is None:
-                        progress.update(task_id, advance=1)
-                    else:
-                        name = result.input_name
-                        if len(result.input_name) > 40:
-                            name = f'{name[:18]}...{name[len(name) - 19:]}'
-                        progress.update(task_id, advance=1, description=name)
-
-                if result is not None:
-                    hashed_lst.append(result)
-
-            future_tasks = []
-            with futures.ProcessPoolExecutor(max_workers=1 if args.parallel < 1 else args.parallel) as executor:
-                for path in paths:
-                    future = executor.submit(_process, path, args.algo, args.buffer_size)
-                    future.add_done_callback(lambda f: _done(f))
-                    future_tasks.append(future)
-
-                # wait all tasks
-                [f.result() for f in future_tasks]
+                _hash_paths(paths, hashed_lst, args, task_id, progress)
+        else:
+            _hash_paths(paths, hashed_lst, args)
 
         if targets is not None:
             mismatch = 0
