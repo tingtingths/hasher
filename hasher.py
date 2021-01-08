@@ -1,5 +1,6 @@
 import argparse
 import errno
+import glob
 import hashlib
 import os
 import re
@@ -91,10 +92,11 @@ def main():
     parser.add_argument('algo', type=str, choices=hashlib.algorithms_available, help='one of these hash algorithms')
     parser.add_argument('input', type=str, help='file path, omit if reading from stdin', nargs='*')
     parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
-    parser.add_argument('-c', '--checksum_file', type=str, nargs='?', help='checksum file to check against')
-    parser.add_argument('--progress', action='store_true', help='print progress bar to stderr')
-    parser.add_argument('-p', '--parallel', default=1, type=int, nargs='?', help='parallel count')
     parser.add_argument('-b', '--buffer-size', default=65536, type=int, nargs='?', help='buffer size. default 65536')
+    parser.add_argument('-c', '--checksum_file', type=str, nargs='?', help='checksum file to check against')
+    parser.add_argument('-g', '--glob', action='store_true', help='treat input as glob pattern')
+    parser.add_argument('-p', '--parallel', default=1, type=int, nargs='?', help='parallel count')
+    parser.add_argument('--progress', action='store_true', help='print progress bar to stderr')
     args = parser.parse_args()
 
     checksum_file = args.checksum_file
@@ -110,7 +112,8 @@ def main():
         # print result
         _print_hashed(hashed_lst)
     else:
-        # read from file
+        # read from files
+        paths = []
         targets: typ.Dict[str, Hashed] = None
         # if checksum file provided, hash file in it. Otherwise use input.
         if checksum_file:
@@ -120,7 +123,11 @@ def main():
                 d['input_name']: Hashed(input_name=d['input_name'], hex=d['hex'], mode='b' if d['mode'] == '*' else 't')
                 for d in [m.groupdict() for m in matches]}
         else:
-            paths = args.input
+            if args.glob:
+                for path in args.input:
+                    paths.extend(glob.glob(path, recursive=True))
+            else:
+                paths = args.input
 
         rich_print = False
         if args.progress:
