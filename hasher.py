@@ -149,6 +149,7 @@ def main():
         if targets is not None:
             mismatch = 0
             not_found = 0
+            ok = 0
 
             candidates: typ.Dict[str, Hashed] = {h.input_name: h for h in hashed_lst}
             for target_name, target in targets.items():
@@ -163,10 +164,13 @@ def main():
                 else:
                     if target.hex == candidate.hex:
                         print(f'{target_name}: OK')
+                        ok += 1
                     else:
                         print(f'{target_name}: Mismatch')
                         mismatch += 1
 
+            print(f'Total {len(targets.keys())} files', file=sys.stderr)
+            print(f'{ok} file{"s" if ok > 1 else ""} OK', file=sys.stderr)
             if not_found > 0:
                 print(f'{not_found} file{"s" if not_found > 1 else ""} cannot be found', file=sys.stderr)
             if mismatch > 0:
