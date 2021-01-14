@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import errno
 import glob
@@ -103,29 +104,30 @@ def main():
     if checksum_file and not os.path.exists(checksum_file):
         raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), checksum_file)
 
+    # If not connected to a tty device, i.e. terminal, ignore input argument and read from stdin.
     hashed_lst = []
     if not sys.stdin.isatty():
         # read from stdin
         hashed = _hash_stream(args.algo, lambda: sys.stdin.buffer.read(4096))
         hashed_lst.append(Hashed(input_name='-', algo=hashed.name, hex=hashed.hexdigest(), mode='b'))
-
-        # print result
-        _print_hashed(hashed_lst)
+        _print_hashed(hashed_lst)  # print result
     else:
         # read from files
         paths = []
-        targets: typ.Dict[str, Hashed] = None
+        expected_hashes: typ.Dict[str, Hashed] = None
         # if checksum file provided, hash file in it. Otherwise use input.
         if checksum_file:
             matches = [m for m in parse_checksum_file(checksum_file)]
             paths = [m.groupdict()['input_name'] for m in matches]
-            targets = {
+            # construct dict from parsed values
+            # input_name -> Hashed(input_name, hex, mode)
+            expected_hashes = {
                 d['input_name']: Hashed(input_name=d['input_name'], hex=d['hex'], mode='b' if d['mode'] == '*' else 't')
-                for d in [m.groupdict() for m in matches]}
+                for d in [m.groupdict() for m in matches]
+            }
         else:
             if args.glob:
-                for path in args.input:
-                    paths.extend(glob.glob(path, recursive=True))
+                [paths.extend(glob.glob(path, recursive=True)) for path in args.input]
             else:
                 paths = args.input
 
@@ -135,8 +137,8 @@ def main():
                 import rich.console
                 import rich.progress
                 rich_print = True
-            except:
-                print('Warning: Cannot import rich...', file=sys.stderr)
+            except ImportError as e:
+                print(f'Warning: Failed to import \'rich\'. {e}', file=sys.stderr)
 
         if rich_print:
             console = rich.console.Console(stderr=True)
@@ -146,30 +148,32 @@ def main():
         else:
             _hash_paths(paths, hashed_lst, args)
 
-        if targets is not None:
+        if expected_hashes is not None:
+            """Match hex from file to actual file from filesystem.
+            Result could be one of [match, mismatch, file not found]"""
             mismatch = 0
             not_found = 0
             ok = 0
 
-            candidates: typ.Dict[str, Hashed] = {h.input_name: h for h in hashed_lst}
-            for target_name, target in targets.items():
-                if target_name not in candidates:
+            actual_hashes: typ.Dict[str, Hashed] = {h.input_name: h for h in hashed_lst}
+            for filename, expected in expected_hashes.items():
+                if filename not in actual_hashes:
                     # should not happens
-                    print(f'{target_name}: No candidate?', file=sys.stderr)
+                    print(f'{filename}: No candidate?', file=sys.stderr)
                     not_found += 1
-                candidate = candidates[target_name]
-                if candidate.err is not None and len(candidate.err) > 0:
-                    print(f'{target_name}: {candidate.err}', file=sys.stderr)
+                actual = actual_hashes[filename]
+                if actual.err is not None and len(actual.err) > 0:
+                    print(f'{filename}: {actual.err}', file=sys.stderr)
                     not_found += 1
                 else:
-                    if target.hex == candidate.hex:
-                        print(f'{target_name}: OK')
+                    if expected.hex == actual.hex:
+                        print(f'{filename}: OK')
                         ok += 1
                     else:
-                        print(f'{target_name}: Mismatch')
+                        print(f'{filename}: Mismatch')
                         mismatch += 1
 
-            print(f'Total {len(targets.keys())} files', file=sys.stderr)
+            print(f'Total {len(expected_hashes.keys())} files', file=sys.stderr)
             print(f'{ok} file{"s" if ok > 1 else ""} OK', file=sys.stderr)
             if not_found > 0:
                 print(f'{not_found} file{"s" if not_found > 1 else ""} cannot be found', file=sys.stderr)

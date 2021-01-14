@@ -1,6 +1,6 @@
 # hasher
 
-Python hashlib wrapper.
+Python hashlib wrapper. Runs on Python 3.6 or above.
 
 ```shell
 $ hasher -h
