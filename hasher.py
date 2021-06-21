@@ -10,7 +10,7 @@ import typing as typ
 from concurrent import futures
 from dataclasses import dataclass
 
-__version__ = '0.0.3'
+__version__ = '0.0.4'
 
 
 @dataclass
