@@ -108,7 +108,7 @@ def main():
     hashed_lst = []
     if not sys.stdin.isatty():
         # read from stdin
-        hashed = _hash_stream(args.algo, lambda: sys.stdin.buffer.read(4096))
+        hashed = _hash_stream(args.algo, lambda: sys.stdin.buffer.read(args.buffer_size))
         hashed_lst.append(Hashed(input_name='-', algo=hashed.name, hex=hashed.hexdigest(), mode='b'))
         _print_hashed(hashed_lst)  # print result
     else:
