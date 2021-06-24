@@ -45,7 +45,7 @@ def parse_checksum_file(file: str) -> typ.Iterator[re.Match]:
     with open(file, 'r') as f:
         s = f.read()
         # ^(?P<hash>.+)\s(?P<mode>\s|[*])(?P<file>.+)$
-        pattern = re.compile(r"^(?P<hex>.+)\s(?P<mode>\s|[*])(?P<input_name>.+)$", flags=re.MULTILINE)
+        pattern = re.compile(r"^(?P<hex>.+?)\s(?P<mode>\s|[*])(?P<input_name>.+)$", flags=re.MULTILINE)
         matches = pattern.finditer(s)
         return matches
 
@@ -112,7 +112,7 @@ def main():
 
     # If not connected to a tty device, i.e. terminal, ignore input argument and read from stdin.
     hashed_lst = []
-    if not sys.stdin.isatty():
+    if not sys.stdin.isatty() and "PYCHARM_HOSTED" not in os.environ:
         # read from stdin
         hashed = _hash_stream(args.algo, lambda: sys.stdin.buffer.read(args.buffer_size))
         hashed_lst.append(Hashed(input_name='-', algo=hashed.name, hex=hashed.hexdigest(), mode='b'))
@@ -157,7 +157,7 @@ def main():
                 print(f'Warning: Failed to import \'rich\'. {e}', file=sys.stderr)
 
         if rich_print:
-            console = rich.console.Console(stderr=True)
+            _console = rich.console.Console(stderr=True)
             with rich.progress.Progress(
                     # ---------- columns
                     "({task.completed}/{task.total})",
@@ -166,45 +166,45 @@ def main():
                     "[progress.percentage]{task.percentage:>3.0f}%",
                     TimeRemainingColumn(),
                     # -------------------
-                    console=console,
+                    console=_console,
                     transient=True
-            ) as progress:
-                task_id = progress.add_task(total=len(paths), description='Hashing...')
-                _hash_paths(paths, hashed_lst, args, task_id, progress)
+            ) as _progress:
+                task_id = _progress.add_task(total=len(paths), description='Hashing...')
+                _hash_paths(paths, hashed_lst, args, task_id, _progress)
         else:
             _hash_paths(paths, hashed_lst, args)
 
         if expected_hashes is not None:
             """Match hex from file to actual file from filesystem.
             Result could be one of [match, mismatch, file not found]"""
-            mismatch = 0
-            not_found = 0
-            ok = 0
+            mismatch = []
+            error = []
+            ok = []
 
             actual_hashes: typ.Dict[str, Hashed] = {h.input_name: h for h in hashed_lst}
             for filename, expected in expected_hashes.items():
                 if filename not in actual_hashes:
                     # should not happens
-                    print(f'{filename}: No candidate?', file=sys.stderr)
-                    not_found += 1
+                    error.append(f'{filename}: No candidate?')
                 actual = actual_hashes[filename]
                 if actual.err is not None and len(actual.err) > 0:
-                    print(f'{filename}: {actual.err}', file=sys.stderr)
-                    not_found += 1
+                    error.append(f'{filename}: {actual.err}')
                 else:
                     if expected.hex == actual.hex:
-                        print(f'{filename}: OK')
-                        ok += 1
+                        ok.append(filename)
                     else:
-                        print(f'{filename}: Mismatch')
-                        mismatch += 1
+                        mismatch.append(filename)
+
+            [print(f'\t{f}: OK') for f in ok]
+            if len(error) > 0:
+                [print(f'\t{s}') for s in error]
+            if len(mismatch) > 0:
+                [print(f'\t{f}: Mismatch') for f in mismatch]
 
             print(f'Total {len(expected_hashes.keys())} files', file=sys.stderr)
-            print(f'{ok} file{"s" if ok > 1 else ""} OK', file=sys.stderr)
-            if not_found > 0:
-                print(f'{not_found} file{"s" if not_found > 1 else ""} cannot be found', file=sys.stderr)
-            if mismatch > 0:
-                print(f'{mismatch} file{"s" if mismatch > 1 else ""} checksum mismatch', file=sys.stderr)
+            print(f'{len(ok)} file{"s" if len(ok) > 1 else ""} OK', file=sys.stderr)
+            print(f'{len(error)} file{"s" if len(error) > 1 else ""} failed to process', file=sys.stderr)
+            print(f'{len(mismatch)} file{"s" if len(mismatch) > 1 else ""} checksum mismatch', file=sys.stderr)
         else:
             _print_hashed(hashed_lst)
 
