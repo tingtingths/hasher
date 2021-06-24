@@ -38,11 +38,11 @@ def _print_hashed(hashed_lst: typ.List[Hashed]):
             print(f'{hashed.hex} *{hashed.input_name}')
 
 
-def parse_checksum_file(file: str) -> typ.Iterator[re.Match]:
+def parse_checksum_file(file: str, encoding=None) -> typ.Iterator[re.Match]:
     if not os.path.exists(file):
         raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), file)
 
-    with open(file, 'r') as f:
+    with open(file, 'r', encoding=encoding) as f:
         s = f.read()
         # ^(?P<hash>.+)\s(?P<mode>\s|[*])(?P<file>.+)$
         pattern = re.compile(r"^(?P<hex>.+?)\s(?P<mode>\s|[*])(?P<input_name>.+)$", flags=re.MULTILINE)
@@ -97,12 +97,15 @@ def main():
     parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     parser.add_argument('-b', '--buffer-size', default=65536, type=int, nargs='?', help='buffer size. default 65536')
     parser.add_argument('-c', '--checksum_file', type=str, nargs='?', help='checksum file to check against')
+    parser.add_argument('--encoding', default='utf8', type=str, nargs='?',
+                        help='checksum file encoding. refer to Python Standard Encodings.')
     parser.add_argument('-p', '--parallel', default=1, type=int, nargs='?', help='parallel count')
     parser.add_argument('--progress', action='store_true', help='print progress bar to stderr')
     # define how to get input files
-    file_input_group = parser.add_mutually_exclusive_group()
-    file_input_group.add_argument('-g', '--glob', action='store_true', help='treat input as glob pattern')
-    file_input_group.add_argument('-r', '--recursive', action='store_true', help='traversal the directory recursively')
+    traversal_type_group = parser.add_mutually_exclusive_group()
+    traversal_type_group.add_argument('-g', '--glob', action='store_true', help='treat input as glob pattern')
+    traversal_type_group.add_argument('-r', '--recursive', action='store_true',
+                                      help='traversal the directory recursively')
     # read arguments
     args = parser.parse_args()
 
@@ -123,7 +126,7 @@ def main():
         expected_hashes: typ.Dict[str, Hashed] = None
         # if checksum file provided, hash file in it. Otherwise use input.
         if checksum_file:
-            matches = [m for m in parse_checksum_file(checksum_file)]
+            matches = [m for m in parse_checksum_file(checksum_file, encoding=args.encoding)]
             paths = [m.groupdict()['input_name'] for m in matches]
             # construct dict from parsed values
             # input_name -> Hashed(input_name, hex, mode)
@@ -195,11 +198,11 @@ def main():
                     else:
                         mismatch.append(filename)
 
-            [print(f'\t{f}: OK') for f in ok]
+            [print(f'{f}: OK') for f in ok]
             if len(error) > 0:
-                [print(f'\t{s}') for s in error]
+                [print(f'{s}') for s in error]
             if len(mismatch) > 0:
-                [print(f'\t{f}: Mismatch') for f in mismatch]
+                [print(f'{f}: Mismatch') for f in mismatch]
 
             print(f'Total {len(expected_hashes.keys())} files', file=sys.stderr)
             print(f'{len(ok)} file{"s" if len(ok) > 1 else ""} OK', file=sys.stderr)
