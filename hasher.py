@@ -5,12 +5,12 @@ import glob
 import hashlib
 import os
 import re
-import sys
 import typing as typ
 from concurrent import futures
-from dataclasses import dataclass
 
 __version__ = '0.0.4'
+
+from rich.progress import *
 
 
 @dataclass
@@ -60,6 +60,8 @@ def _hash_paths(paths, hashed_lst, prog_args, task_id=None, progress=None):
                 name = result.input_name
                 if len(result.input_name) > 40:
                     name = f'{name[:18]}...{name[len(name) - 19:]}'
+                if len(result.input_name) < 40:
+                    name = f'{name}{" " * (40 - len(result.input_name))}'
                 progress.update(task_id, advance=1, description=name)
 
         if result is not None:
@@ -95,9 +97,13 @@ def main():
     parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     parser.add_argument('-b', '--buffer-size', default=65536, type=int, nargs='?', help='buffer size. default 65536')
     parser.add_argument('-c', '--checksum_file', type=str, nargs='?', help='checksum file to check against')
-    parser.add_argument('-g', '--glob', action='store_true', help='treat input as glob pattern')
     parser.add_argument('-p', '--parallel', default=1, type=int, nargs='?', help='parallel count')
     parser.add_argument('--progress', action='store_true', help='print progress bar to stderr')
+    # define how to get input files
+    file_input_group = parser.add_mutually_exclusive_group()
+    file_input_group.add_argument('-g', '--glob', action='store_true', help='treat input as glob pattern')
+    file_input_group.add_argument('-r', '--recursive', action='store_true', help='traversal the directory recursively')
+    # read arguments
     args = parser.parse_args()
 
     checksum_file = args.checksum_file
@@ -128,6 +134,16 @@ def main():
         else:
             if args.glob:
                 [paths.extend(glob.glob(path, recursive=True)) for path in args.input]
+            elif args.recursive:
+                # old fashioned traversal
+                for path in args.input:
+                    if os.path.isfile(path):
+                        paths.append(path)
+                        continue
+                    if os.path.isdir(path):
+                        for root, dirs, files in os.walk(path):
+                            if len(files) > 0:
+                                paths.extend([os.path.join(root, f) for f in files])
             else:
                 paths = args.input
 
@@ -142,7 +158,17 @@ def main():
 
         if rich_print:
             console = rich.console.Console(stderr=True)
-            with rich.progress.Progress(console=console, transient=True) as progress:
+            with rich.progress.Progress(
+                    # ---------- columns
+                    "({task.completed}/{task.total})",
+                    "[progress.description]{task.description}",
+                    BarColumn(),
+                    "[progress.percentage]{task.percentage:>3.0f}%",
+                    TimeRemainingColumn(),
+                    # -------------------
+                    console=console,
+                    transient=True
+            ) as progress:
                 task_id = progress.add_task(total=len(paths), description='Hashing...')
                 _hash_paths(paths, hashed_lst, args, task_id, progress)
         else:
