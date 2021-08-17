@@ -8,7 +8,7 @@ import re
 import typing as typ
 from concurrent import futures
 
-__version__ = '0.0.4'
+__version__ = '0.0.5'
 
 from rich.progress import *
 
