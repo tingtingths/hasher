@@ -5,12 +5,12 @@ import glob
 import hashlib
 import os
 import re
+import sys
 import typing as typ
 from concurrent import futures
+from dataclasses import dataclass
 
 __version__ = '0.0.5'
-
-from rich.progress import *
 
 
 @dataclass
@@ -165,9 +165,9 @@ def main():
                     # ---------- columns
                     "({task.completed}/{task.total})",
                     "[progress.description]{task.description}",
-                    BarColumn(),
+                    rich.progress.BarColumn(),
                     "[progress.percentage]{task.percentage:>3.0f}%",
-                    TimeRemainingColumn(),
+                    rich.progress.TimeRemainingColumn(),
                     # -------------------
                     console=_console,
                     transient=True
